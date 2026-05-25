@@ -50,22 +50,31 @@ def handle_connection(conn, directory):
                 ).encode("utf-8") + response_body
                 conn.sendall(response)
                 break
-    elif path.startswith("/files"):
+    elif path.startswith("/files/"):
         filename = path[7:]
         filepath = os.path.join(directory, filename)
-        if os.path.exists(filepath):
-            with open(filepath, "r") as f:
-                content = f.read()
-                response_body = content.encode("utf-8")
-                response = (
-                    f"HTTP/1.1 200 OK\r\n"
-                    f"Content-Type: application/octet-stream\r\n"
-                    f"Content-Length: {len(content)}\r\n"
-                    f"\r\n"
-                ).encode("utf-8") + response_body
-                conn.sendall(response)
-        else:
-            conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
+
+        if parts[0] == "GET":
+            if os.path.exists(filepath):
+                with open(filepath, "r") as f:
+                    content = f.read()
+                    response_body = content.encode("utf-8")
+                    response = (
+                        f"HTTP/1.1 200 OK\r\n"
+                        f"Content-Type: application/octet-stream\r\n"
+                        f"Content-Length: {len(content)}\r\n"
+                        f"\r\n"
+                    ).encode("utf-8") + response_body
+                    conn.sendall(response)
+            else:
+                conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
+
+        elif parts[0] == "POST":
+            body = request_data.split("\r\n\r\n")[1] 
+            with open(filepath, "w") as f:
+                f.write(body)
+            conn.sendall(b"HTTP/1.1 201 Created\r\n\r\n")
+
     
     else:
         # Unknown path -> Return 404 Not Found
