@@ -44,7 +44,7 @@ graph TD
     end
 ```
 
-## 📚 Core HTTP Concepts Explored
+##  Core HTTP Concepts Explored
 
 Building this server required implementing several foundational networking concepts from scratch:
 - **TCP Sockets:** The underlying "phone lines" of the internet. The server binds to a port and listens for incoming raw bytes, avoiding the abstractions provided by modern web frameworks.
