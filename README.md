@@ -13,6 +13,7 @@ A custom HTTP server built from scratch in Python using only the standard `socke
 - [x] Reading command-line arguments to configure server state
 - [x] Returning file contents from disk (`application/octet-stream`)
 - [x] Receiving and saving files to disk (Parsing `POST` request bodies)
+- [x] Parsing `Accept-Encoding` headers to support `gzip` compression
 
 ## How to Run
 
