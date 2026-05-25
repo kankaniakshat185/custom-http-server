@@ -12,6 +12,15 @@ def handle_connection(conn, directory):
     lines = request_data.split("\r\n")
     request_line = lines[0]
     
+    # Check if client supports gzip
+    supports_gzip = False
+    for l in lines:
+        if l.startswith("Accept-Encoding: "):
+            encodings = l[17:]
+            encoding_list = [e.strip() for e in encodings.split(",")]
+            if "gzip" in encoding_list:
+                supports_gzip = True
+    
     # 5. Extract the path from the request line (e.g. "GET /path HTTP/1.1")
     parts = request_line.split(" ")
     if len(parts) > 1:
@@ -28,12 +37,23 @@ def handle_connection(conn, directory):
         # Echo path -> Extract the string and return it in the body
         echo_string = path[6:]
         response_body = echo_string.encode("utf-8")
-        response = (
-            f"HTTP/1.1 200 OK\r\n"
-            f"Content-Type: text/plain\r\n"
-            f"Content-Length: {len(echo_string)}\r\n"
-            f"\r\n"
-        ).encode("utf-8") + response_body
+        
+        if supports_gzip:
+            response = (
+                f"HTTP/1.1 200 OK\r\n"
+                f"Content-Type: text/plain\r\n"
+                f"Content-Encoding: gzip\r\n"
+                f"Content-Length: {len(echo_string)}\r\n"
+                f"\r\n"
+            ).encode("utf-8") + response_body
+        else:
+            response = (
+                f"HTTP/1.1 200 OK\r\n"
+                f"Content-Type: text/plain\r\n"
+                f"Content-Length: {len(echo_string)}\r\n"
+                f"\r\n"
+            ).encode("utf-8") + response_body
+            
         conn.sendall(response)
 
     elif path == "/user-agent":
@@ -75,7 +95,6 @@ def handle_connection(conn, directory):
                 f.write(body)
             conn.sendall(b"HTTP/1.1 201 Created\r\n\r\n")
 
-    
     else:
         # Unknown path -> Return 404 Not Found
         conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
