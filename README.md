@@ -44,7 +44,13 @@ graph TD
     end
 ```
 
-##  Core HTTP Concepts Explored
+### How it works:
+1. The **Main Thread** constantly listens for new incoming TCP connections on Port `4221`.
+2. When a client connects, the Main Thread immediately passes that connection to a new background **Worker Thread**. This concurrent architecture allows the server to handle multiple clients simultaneously without blocking.
+3. The Worker Thread reads the raw HTTP byte stream from the client, parses the headers, and routes the request to the appropriate endpoint logic.
+4. Because the server implements **Persistent Connections**, the Worker Thread does not instantly terminate the connection after replying. Instead, it loops back to the beginning and waits for the client's next request, only destroying the thread if the client sends a `Connection: close` header or unexpectedly disconnects.
+
+## 📚 Core HTTP Concepts Explored
 
 Building this server required implementing several foundational networking concepts from scratch:
 - **TCP Sockets:** The underlying "phone lines" of the internet. The server binds to a port and listens for incoming raw bytes, avoiding the abstractions provided by modern web frameworks.
