@@ -10,6 +10,8 @@ A custom HTTP server built from scratch in Python using only the standard `socke
 - [x] Responding with HTTP message bodies (`Content-Type` and `Content-Length`)
 - [x] Parsing and extracting HTTP Headers (e.g., `User-Agent`)
 - [x] Handling concurrent client connections using Python `threading`
+- [x] Reading command-line arguments to configure server state
+- [x] Returning file contents from disk (`application/octet-stream`)
 
 ## How to Run
 
