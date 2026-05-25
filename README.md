@@ -15,6 +15,7 @@ A custom HTTP server built from scratch in Python using only the standard `socke
 - [x] Receiving and saving files to disk (Parsing `POST` request bodies)
 - [x] Parsing `Accept-Encoding` headers to support `gzip` compression
 - [x] Compressing HTTP response bodies using the `gzip` library
+- [x] Handling HTTP/1.1 Persistent Connections (`Keep-Alive`)
 
 ## How to Run
 
