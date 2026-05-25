@@ -2,6 +2,8 @@ import socket  # noqa: F401
 import threading
 import sys
 import os
+import gzip
+
 
 
 def handle_connection(conn, directory):
@@ -39,13 +41,14 @@ def handle_connection(conn, directory):
         response_body = echo_string.encode("utf-8")
         
         if supports_gzip:
+            compressed_body = gzip.compress(response_body)
             response = (
                 f"HTTP/1.1 200 OK\r\n"
                 f"Content-Type: text/plain\r\n"
                 f"Content-Encoding: gzip\r\n"
-                f"Content-Length: {len(echo_string)}\r\n"
+                f"Content-Length: {len(compressed_body)}\r\n"
                 f"\r\n"
-            ).encode("utf-8") + response_body
+            ).encode("utf-8") + compressed_body
         else:
             response = (
                 f"HTTP/1.1 200 OK\r\n"
