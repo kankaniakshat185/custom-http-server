@@ -1,15 +1,8 @@
 import socket  # noqa: F401
+import threading
 
 
-def main():
-    print("Logs from your program will appear here!")
-
-    # 1. Bind to port 4221
-    server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
-    
-    # 2. Wait for a client connection
-    conn, addr = server_socket.accept() 
-
+def handle_connection(conn):
     # 3. Read and decode the request data
     request_data = conn.recv(1024).decode("utf-8")
     
@@ -59,6 +52,22 @@ def main():
     else:
         # Unknown path -> Return 404 Not Found
         conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
+
+    conn.close()
+
+def main():
+    print("Logs from your program will appear here!")
+
+    # 1. Bind to port 4221
+    server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
+    
+    while True:
+    # 2. Wait for a client connection
+        conn, addr = server_socket.accept() 
+    
+        client_thread = threading.Thread(target=handle_connection, args=(conn,))
+        client_thread.start()
+    
 
 
 if __name__ == "__main__":
