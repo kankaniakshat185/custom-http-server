@@ -1,8 +1,10 @@
 import socket  # noqa: F401
 import threading
+import sys
+import os
 
 
-def handle_connection(conn):
+def handle_connection(conn, directory):
     # 3. Read and decode the request data
     request_data = conn.recv(1024).decode("utf-8")
     
@@ -48,6 +50,22 @@ def handle_connection(conn):
                 ).encode("utf-8") + response_body
                 conn.sendall(response)
                 break
+    elif path.startswith("/files"):
+        filename = path[7:]
+        filepath = os.path.join(directory, filename)
+        if os.path.exists(filepath):
+            with open(filepath, "r") as f:
+                content = f.read()
+                response_body = content.encode("utf-8")
+                response = (
+                    f"HTTP/1.1 200 OK\r\n"
+                    f"Content-Type: application/octet-stream\r\n"
+                    f"Content-Length: {len(content)}\r\n"
+                    f"\r\n"
+                ).encode("utf-8") + response_body
+                conn.sendall(response)
+        else:
+            conn.sendall(b"HTTP/1.1 404 Not Found\r\n\r\n")
     
     else:
         # Unknown path -> Return 404 Not Found
@@ -58,6 +76,10 @@ def handle_connection(conn):
 def main():
     print("Logs from your program will appear here!")
 
+    directory = ""
+    if len(sys.argv) == 3 and sys.argv[1] == "--directory":
+        directory = sys.argv[2]
+    
     # 1. Bind to port 4221
     server_socket = socket.create_server(("localhost", 4221), reuse_port=True)
     
@@ -65,7 +87,7 @@ def main():
     # 2. Wait for a client connection
         conn, addr = server_socket.accept() 
     
-        client_thread = threading.Thread(target=handle_connection, args=(conn,))
+        client_thread = threading.Thread(target=handle_connection, args=(conn, directory))
         client_thread.start()
     
 
