@@ -44,6 +44,14 @@ graph TD
     end
 ```
 
+## 📚 Core HTTP Concepts Explored
+
+Building this server required implementing several foundational networking concepts from scratch:
+- **TCP Sockets:** The underlying "phone lines" of the internet. The server binds to a port and listens for incoming raw bytes, avoiding the abstractions provided by modern web frameworks.
+- **The HTTP Request Lifecycle:** Manually parsing the Request Line (`GET /path HTTP/1.1`), extracting headers line-by-line, and separating the HTTP body using the standard `\r\n\r\n` byte sequence.
+- **Persistent Connections (Keep-Alive):** In HTTP/1.1, connections are kept open by default to reduce latency. The server manages a `while True` loop over the socket, processing multiple sequential requests until the client explicitly sends a `Connection: close` header or disconnects.
+- **Content Negotiation:** The server dynamically inspects `Accept-Encoding` headers to determine if the client supports decompression, and actively uses the `gzip` algorithm to shrink response bodies, updating the `Content-Length` and `Content-Encoding` headers accordingly.
+
 ## How to Run
 
 1. **Start the server:** 
