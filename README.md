@@ -1,10 +1,10 @@
-# ⚡ Python HTTP Server
+# Python HTTP Server
 
 A lightweight, robust, and custom-built HTTP/1.1 server written entirely from scratch in Python. 
 
 Built exclusively using the standard `socket` library, this project bypasses modern frameworks to demonstrate a fundamental, bare-metal understanding of networking protocols, TCP socket programming, and the HTTP/1.1 specification.
 
-## 🚀 Features
+## Features
 - **TCP Socket Management**: Low-level binding, listening, and accepting of raw network connections.
 - **Concurrent Threading**: Capable of handling massive traffic via isolated background threads for each connection.
 - **Persistent Connections**: Implements `Keep-Alive` logic to reuse TCP connections across multiple requests.
@@ -12,7 +12,7 @@ Built exclusively using the standard `socket` library, this project bypasses mod
 - **Dynamic Routing**: URL path parsing and routing for endpoints.
 - **File System Operations**: Safely reads, writes, and serves binary files (`application/octet-stream`) directly from disk based on `POST` and `GET` requests.
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 graph TD
@@ -44,7 +44,7 @@ graph TD
     end
 ```
 
-## 🛠️ How to Run
+## How to Run
 
 1. **Start the server:** 
 Provide a directory argument to configure where the server should save and serve files from.
