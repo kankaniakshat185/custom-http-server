@@ -50,7 +50,7 @@ graph TD
 3. The Worker Thread reads the raw HTTP byte stream from the client, parses the headers, and routes the request to the appropriate endpoint logic.
 4. Because the server implements **Persistent Connections**, the Worker Thread does not instantly terminate the connection after replying. Instead, it loops back to the beginning and waits for the client's next request, only destroying the thread if the client sends a `Connection: close` header or unexpectedly disconnects.
 
-## 📚 Core HTTP Concepts Explored
+## Core HTTP Concepts Explored
 
 Building this server required implementing several foundational networking concepts from scratch:
 - **TCP Sockets:** The underlying "phone lines" of the internet. The server binds to a port and listens for incoming raw bytes, avoiding the abstractions provided by modern web frameworks.
