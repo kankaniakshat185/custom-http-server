@@ -2,89 +2,91 @@
 
 A lightweight, robust, and custom-built HTTP/1.1 server written entirely from scratch in Python. 
 
-Built exclusively using the standard `socket` library, this project bypasses modern frameworks to demonstrate a fundamental, bare-metal understanding of networking protocols, TCP socket programming, and the HTTP/1.1 specification.
+Built exclusively using standard libraries (`socket`, `threading`, `mimetypes`, `gzip`), this project bypasses web frameworks to demonstrate a fundamental, bare-metal understanding of networking protocols, TCP socket programming, and the HTTP/1.1 specification.
+
+---
 
 ## Features
-- **TCP Socket Management**: Low-level binding, listening, and accepting of raw network connections.
-- **Concurrent Threading**: Capable of handling massive traffic via isolated background threads for each connection.
-- **Persistent Connections**: Implements `Keep-Alive` logic to reuse TCP connections across multiple requests.
-- **Content Negotiation**: Supports dynamic `gzip` compression based on client `Accept-Encoding` headers.
-- **Dynamic Routing**: URL path parsing and routing for endpoints.
-- **File System Operations**: Safely reads, writes, and serves binary files (`application/octet-stream`) directly from disk based on `POST` and `GET` requests.
 
-## Architecture
+- **TCP Socket Management**: Low-level binding (`0.0.0.0:4221`), listening, and accepting of raw network connections.
+- **Concurrent Threading**: Spawns background worker threads for each connection to handle traffic concurrently.
+- **Persistent Connections**: Implements `Connection: Keep-Alive` to reuse TCP sockets for subsequent requests.
+- **Content Negotiation**: Inspects `Accept-Encoding` headers and dynamically compresses body payloads using `gzip`.
+- **MIME-Type Resolution**: Automatically determines and sets the correct HTTP `Content-Type` header (e.g. `text/html`, `image/png`, `application/json`) when serving files.
+- **Binary File Handling**: Safe binary mode read/writes for serving non-corrupted media files.
+- **HTTP Methods Support**: Dynamic routing supporting `GET`, `POST`, and `DELETE` requests.
+- **Security Check**: Active Directory Traversal protection utilizing canonical absolute path validation (`os.path.realpath`) to restrict access outside the designated target folder.
+- **Request Logging**: Thread-safe formatted console outputs logging client details, timestamps, requested path, method, and return status codes.
 
-```mermaid
-graph TD
-    Client1[Client / Browser 1] -->|TCP Connection| ServerSocket[Server Socket :4221]
-    Client2[Client / Browser 2] -->|TCP Connection| ServerSocket
-    Client3[Client / Browser 3] -->|TCP Connection| ServerSocket
-
-    ServerSocket -->|Accepts Connection| MainThread[Main Thread 'while True']
-
-    MainThread -->|Spawns Thread| T1[Worker Thread 1]
-    MainThread -->|Spawns Thread| T2[Worker Thread 2]
-    MainThread -->|Spawns Thread| T3[Worker Thread 3]
-
-    subgraph "Connection Handler (Per Thread)"
-    T1 --> |1. Read Bytes| Parse[Parse Headers & Request Line]
-    Parse --> |2. Route Path| Routing{Router}
-    
-    Routing -->|/echo/| Echo[Gzip Compress & Echo Text]
-    Routing -->|/user-agent| UA[Extract Client Software]
-    Routing -->|/files/ GET| ReadFile[Read from Disk]
-    Routing -->|/files/ POST| WriteFile[Write to Disk]
-    
-    Echo --> |3. Send Response| Res[Send HTTP/1.1 Bytes]
-    UA --> Res
-    ReadFile --> Res
-    WriteFile --> Res
-    
-    Res --> |4. Keep-Alive| T1
-    end
-```
-
-### How it works:
-1. The **Main Thread** constantly listens for new incoming TCP connections on Port `4221`.
-2. When a client connects, the Main Thread immediately passes that connection to a new background **Worker Thread**. This concurrent architecture allows the server to handle multiple clients simultaneously without blocking.
-3. The Worker Thread reads the raw HTTP byte stream from the client, parses the headers, and routes the request to the appropriate endpoint logic.
-4. Because the server implements **Persistent Connections**, the Worker Thread does not instantly terminate the connection after replying. Instead, it loops back to the beginning and waits for the client's next request, only destroying the thread if the client sends a `Connection: close` header or unexpectedly disconnects.
-
-## Core HTTP Concepts Explored
-
-Building this server required implementing several foundational networking concepts from scratch:
-- **TCP Sockets:** The underlying "phone lines" of the internet. The server binds to a port and listens for incoming raw bytes, avoiding the abstractions provided by modern web frameworks.
-- **The HTTP Request Lifecycle:** Manually parsing the Request Line (`GET /path HTTP/1.1`), extracting headers line-by-line, and separating the HTTP body using the standard `\r\n\r\n` byte sequence.
-- **Persistent Connections (Keep-Alive):** In HTTP/1.1, connections are kept open by default to reduce latency. The server manages a `while True` loop over the socket, processing multiple sequential requests until the client explicitly sends a `Connection: close` header or disconnects.
-- **Content Negotiation:** The server dynamically inspects `Accept-Encoding` headers to determine if the client supports decompression, and actively uses the `gzip` algorithm to shrink response bodies, updating the `Content-Length` and `Content-Encoding` headers accordingly.
+---
 
 ## How to Run
 
-1. **Start the server:** 
-Provide a directory argument to configure where the server should save and serve files from.
+### Method 1: Running Locally
+Provide a directory argument to configure where the server should save and serve files from:
 ```bash
-python3 app/main.py --directory /tmp/
+mkdir -p sandbox
+python3 app/main.py --directory ./sandbox
 ```
 
-2. **Test Endpoints:**
-Open a new terminal and test the server's concurrent capabilities using cURL.
+### Method 2: Running with Docker (Recommended)
+You can run the entire server inside an isolated container with zero python configuration on your host machine:
 
-**Root Path:**
+1. **Build and start the container**:
+   ```bash
+   docker-compose up --build
+   ```
+2. **Stop and clean up containers**:
+   ```bash
+   docker-compose down
+   ```
+3. **Follow logs in real-time**:
+   ```bash
+   docker-compose logs -f
+   ```
+
+*Note: Docker maps your local `./sandbox` folder to `/data` inside the container via a volume bind mount. Files written by the container are saved to `./sandbox/` on your host computer.*
+
+---
+
+## Testing Endpoints
+
+Open a new terminal window to test the server endpoints:
+
+#### 1. Root Path
 ```bash
 curl -v http://localhost:4221/
 ```
 
-**Echo with GZIP Compression:**
+#### 2. Echo String (with Gzip support)
+Add the `--compressed` flag to instruct curl to automatically decompress the returned gzip stream:
 ```bash
-curl -v http://localhost:4221/echo/hello_world -H "Accept-Encoding: gzip"
+curl -v http://localhost:4221/echo/hello_world --compressed
 ```
 
-**Upload a File (POST):**
+#### 3. Fetch User-Agent
 ```bash
-curl -v -X POST http://localhost:4221/files/new_file.txt -d 'Hello this is my test file'
+curl -v http://localhost:4221/user-agent -H "User-Agent: my-custom-agent"
 ```
 
-**Download a File (GET):**
+#### 4. Upload a File (POST)
 ```bash
-curl -v http://localhost:4221/files/new_file.txt
+curl -v -X POST http://localhost:4221/files/hello.txt -d "Written through custom server"
+```
+
+#### 5. Download a File (GET)
+Observe that the server dynamically resolves the correct MIME-type header:
+```bash
+curl -v http://localhost:4221/files/hello.txt
+```
+
+#### 6. Delete a File (DELETE)
+```bash
+curl -v -X DELETE http://localhost:4221/files/hello.txt
+```
+
+#### 7. Directory Traversal Security Test
+Attempts to read files outside the sandbox folder (like `/etc/passwd`) are blocked with a `403 Forbidden` response:
+```bash
+curl -v --path-as-is http://localhost:4221/files/../../../../etc/passwd
 ```
