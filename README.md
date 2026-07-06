@@ -1,62 +1,98 @@
-# Python HTTP Server & Web Framework
+# Custom Python HTTP Server & Web Framework
 
-A lightweight, robust, and highly modular custom-built HTTP/1.1 server and web framework written entirely from scratch in Python. 
+A high-performance, modular HTTP/1.1 server and web framework built from scratch in Python. 
 
-Built exclusively using standard libraries (`socket`, `selectors`, `threading`, `gzip`), this project demonstrates high-performance concurrency concepts including **non-blocking I/O multiplexing (`epoll`/`kqueue`)** and a **worker Thread Pool** combined with an Express-style routing and middleware engine.
+This project implements **non-blocking I/O multiplexing (`epoll`/`kqueue`)** via the standard `selectors` library, combined with a **Thread Pool worker queue** to offload blocking routing and filesystem operations. It features an Express/Koa-style middleware pipeline and custom routing.
 
 ---
 
 ## Features
 
-- **Asynchronous Event Loop**: Uses `selectors` (`epoll` on Linux, `kqueue` on macOS) for non-blocking network socket polling.
-- **Pre-allocated Thread Pool**: Offloads routing and blocking disk I/O operations to worker threads, preventing network loops from blocking.
-- **Express-style Middlewares**: Onion-style recursive middleware execution pipeline (`request, next_handler`).
-- **Dynamic Variable Routing**: Register patterns with dynamic path parameters (e.g., `/echo/:string`).
-- **Persistent Connections**: Full support for HTTP/1.1 `Connection: Keep-Alive` pipelined socket reuse.
-- **Content Negotiation**: Dynamic GZIP compression for optimized body payloads.
-- **Directory Traversal Protection**: Validation via canonical filesystem path checks (`os.path.realpath`) to lock files in a sandbox folder.
+- **Asynchronous Event Loop**: Uses `selectors` (`epoll` on Linux, `kqueue` on macOS) for non-blocking socket polling.
+- **Worker Thread Pool**: Pre-allocated `ThreadPoolExecutor` offloads filesystem and route handler blocking tasks.
+- **Middleware Pipeline**: Onion-style recursive middleware execution pipeline (`request, next_handler`).
+- **Dynamic Routing**: Dynamic path parameter matching (e.g., `/echo/:string`).
+- **Persistent Connections**: HTTP/1.1 `Connection: Keep-Alive` pipelined socket reuse.
+- **Content Negotiation**: Dynamic GZIP compression.
+- **Directory Traversal Protection**: Validation via canonical filesystem checks (`os.path.realpath`) to secure static file endpoints.
 - **MIME-Type Resolution**: Automatic file content detection via Python's standard `mimetypes` library.
-- **Thread-Safe Access Logging**: Logger middleware printing formatted console logs.
+- **Logger**: Built-in access logging middleware.
 
 ---
 
-## Codebase Modular Structure
+## Architecture
 
-The codebase is split into distinct modules following OOP and SOLID principles:
-- `core/server.py`: Manages socket bindings, selectors loop, and thread pool dispatching.
-- `core/request.py` & `core/response.py`: Data models encapsulating HTTP states.
-- `routing/router.py`: Handles dynamic route registries.
-- `middleware/`: Pipeline base interface and built-in middlewares (logger, static files).
+```mermaid
+graph TD
+    Client1[Client / Browser 1] -->|TCP Connection| ServerSocket[Server Socket :4221]
+    Client2[Client / Browser 2] -->|TCP Connection| ServerSocket
+
+    ServerSocket -->|Accepts Connection| EventLoop[Main Event Loop selectors]
+    
+    EventLoop -->|Non-blocking Read| RequestRead[Buffer Request Bytes]
+    RequestRead -->|Assemble full HTTP request| ThreadPool[ThreadPoolExecutor Worker Pool]
+    
+    subgraph "Thread Pool Tasks"
+    ThreadPool -->|Worker Thread| Pipeline[Middleware Pipeline]
+    Pipeline -->|Logger| Router[Router matches route]
+    Router -->|GET /files/| PathCheck{Path Check}
+    PathCheck -->|Invalid| Forbidden[403 Forbidden Response]
+    PathCheck -->|Valid| FileOps[File Operations GET/POST/DELETE]
+    
+    FileOps --> Response[HTTPResponse]
+    Forbidden --> Response
+    Router -->|GET /echo/| Response
+    
+    Response -->|Write Response bytes| SocketSend[Send response to Client]
+    end
+    
+    SocketSend -->|Keep-Alive Check| EventLoop
+```
+
+### Concurrency Model
+1. **Network I/O**: The server runs a single-threaded event loop. All client socket connections are set to non-blocking mode and monitored for reading. 
+2. **Task Offloading**: Reading raw request bytes is handled directly on the main event loop thread. Once the headers and full body are assembled, the request is offloaded as a task to a pre-allocated worker pool of threads.
+3. **Keep-Alive**: After a worker thread finished writing response bytes to the client socket, the socket is re-registered back to the selectors event loop to wait for subsequent requests.
+
+---
+
+## Project Structure
+
+The framework is split into distinct modules following OOP and SOLID principles:
+- `core/server.py`: Socket listener, event loop, and thread pool orchestration.
+- `core/request.py` & `core/response.py`: HTTP request parsing and response serializing.
+- `routing/router.py`: Route mapping and path parameter resolver.
+- `middleware/`: Pipeline execution engine and built-in middleware modules.
 
 ---
 
 ## How to Run
 
-### Method 1: Running Locally
-Since the server uses a modular package structure, set the `PYTHONPATH` when launching the server:
+### Local Execution
+Set the `PYTHONPATH` when starting the server to resolve package imports:
 ```bash
 mkdir -p sandbox
 PYTHONPATH=. python3 app/main.py --directory ./sandbox
 ```
 
-### Method 2: Running with Docker
-You can run the server inside an isolated container:
+### Docker Execution
+Run the server in a containerized environment:
 ```bash
 # Build and start in foreground
 docker-compose up --build
 
-# Run in detached mode (background)
+# Run in background
 docker-compose up -d
 
-# Shutdown and cleanup containers
+# Stop container
 docker-compose down
 ```
 
 ---
 
-## How to Use as a Web Framework
+## Custom Framework Usage
 
-Other developers can use this project as a reusable micro-framework. Simply write a custom python script and import our components:
+To use this project as a lightweight web framework, import the server and response classes:
 
 ```python
 from app.core.server import HTTPServer
@@ -65,21 +101,21 @@ from app.core.response import HTTPResponse
 # Initialize server
 server = HTTPServer(host="0.0.0.0", port=4221, max_workers=10)
 
-# 1. Register middlewares
+# Register a custom middleware
 def custom_middleware(request, next_handler):
     print(f"Request intercepted: {request.path}")
     return next_handler(request)
 
 server.pipeline.use(custom_middleware)
 
-# 2. Register dynamic routes
+# Register a dynamic route
 def hello_handler(request):
     name = request.path_params.get("name", "World")
     return HTTPResponse(status=200, body=f"Hello, {name}!".encode("utf-8"))
 
 server.router.add_route("GET", "/hello/:name", hello_handler)
 
-# 3. Start Event Loop
+# Start Event Loop
 server.start()
 ```
 
@@ -90,27 +126,22 @@ server.start()
 You can benchmark this server against a standard Python Flask application using load-testing tools like **Apache Bench (`ab`)** or **`wrk`**.
 
 ### 1. Test Setup
-Start both servers on different ports (e.g. our custom server on `:4221` and a basic Flask app on `:5000`).
+Start both servers on different ports (e.g. our custom server on `:4221` and a basic Flask app on `:8080`).
 
 ### 2. Running Benchmarks
-
-#### Using Apache Bench (`ab`)
 Send 10,000 requests with a concurrency of 100 requests at the `/` endpoint:
 ```bash
 # Benchmark our Custom Server
 ab -n 10000 -c 100 http://localhost:4221/
 
 # Benchmark Flask
-ab -n 10000 -c 100 http://localhost:5000/
+ab -n 10000 -c 100 http://localhost:8080/
 ```
 
-#### Using `wrk`
-Run a 30-second benchmark using 8 threads and 200 concurrent connections:
-```bash
-wrk -t8 -c200 -d30s http://localhost:4221/
-```
+---
 
-### 3. Benchmarking Results (10,000 requests, 100 concurrent connections)
+## Performance & Benchmarks
+
 Here are the actual metrics gathered by running `ab` on a local Mac:
 
 | Metric | Custom HTTP Server (Our Framework) | Python Flask (Werkzeug) | Comparison |
@@ -147,6 +178,11 @@ curl -v -X POST http://localhost:4221/files/hello.txt -d "Written through custom
 curl -v http://localhost:4221/files/hello.txt
 # Delete
 curl -v -X DELETE http://localhost:4221/files/hello.txt
+```
+
+#### 5. Directory Traversal Security Test
+```bash
+curl -v --path-as-is http://localhost:4221/files/../../../../etc/passwd
 ```
 
 ---
