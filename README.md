@@ -1,8 +1,6 @@
 # Custom Python HTTP Server & Web Framework
 
-A high-performance, modular HTTP/1.1 server and web framework built from scratch in Python. 
-
-This project implements **non-blocking I/O multiplexing (`epoll`/`kqueue`)** via the standard `selectors` library, combined with a **Thread Pool worker queue** to offload blocking routing and filesystem operations. It features an Express/Koa-style middleware pipeline and custom routing.
+A modular HTTP/1.1 server and lightweight web framework built from scratch in Python, featuring an event-driven architecture with non-blocking I/O (`selectors`), a worker thread pool for request processing, Express-style middleware, dynamic routing, and persistent HTTP/1.1 connections.
 
 ---
 
@@ -17,6 +15,12 @@ This project implements **non-blocking I/O multiplexing (`epoll`/`kqueue`)** via
 - **Directory Traversal Protection**: Validation via canonical filesystem checks (`os.path.realpath`) to secure static file endpoints.
 - **MIME-Type Resolution**: Automatic file content detection via Python's standard `mimetypes` library.
 - **Logger**: Built-in access logging middleware.
+
+### Performance Highlights
+* **~1,200 requests/sec** throughput.
+* **~17% faster** than Flask under this benchmark workload.
+* **~14.5% lower** average latency.
+* **~33% lower** tail latency (longest request).
 
 ---
 
@@ -56,13 +60,40 @@ graph TD
 
 ---
 
-## Project Structure
+## Design Goals
 
-The framework is split into distinct modules following OOP and SOLID principles:
-- `core/server.py`: Socket listener, event loop, and thread pool orchestration.
-- `core/request.py` & `core/response.py`: HTTP request parsing and response serializing.
-- `routing/router.py`: Route mapping and path parameter resolver.
-- `middleware/`: Pipeline execution engine and built-in middleware modules.
+- **Modular Architecture**: Clean modular layout using SOLID principles.
+- **Separation of Concerns**: Isolated request/response modeling, event loop management, and routing logic.
+- **Event-Driven Networking**: High concurrency scaling using kernel-level event triggers (`epoll`/`kqueue`).
+- **Extensible Middleware Pipeline**: Customizable chain pipeline representing modern production frameworks.
+- **Cross-Platform Compatibility**: Automatically resolves selector implementations across macOS and Linux.
+- **Thread-Safe Request Execution**: Socket registries and state maps protected by lock synchronization objects.
+
+---
+
+## Directory Structure
+
+```
+custom-http-server/
+ ├── app/
+ │    ├── core/
+ │    │    ├── request.py       # HTTPRequest parsing
+ │    │    ├── response.py      # HTTPResponse serialization
+ │    │    └── server.py        # Selector loop and ThreadPool manager
+ │    ├── middleware/
+ │    │    ├── base.py          # Middleware pipeline engine
+ │    │    ├── logger.py        # Format console logging
+ │    │    └── static.py        # Static file actions & path defenses
+ │    ├── routing/
+ │    │    └── router.py        # Path parameter match routing
+ │    └── main.py               # Framework setup and routes register
+ ├── docs/
+ │    ├── adr_architecture.md   # Architectural Decision Record
+ │    ├── definitions.md        # Technical definitions guide
+ │    └── interview_defense.md  # System design prep defense
+ ├── Dockerfile
+ └── Docker-compose.yaml
+```
 
 ---
 
@@ -121,7 +152,7 @@ server.start()
 
 ---
 
-## Benchmarking Guide (Comparing with Flask)
+## Benchmarking Guide
 
 You can benchmark this server against a standard Python Flask application using load-testing tools like **Apache Bench (`ab`)** or **`wrk`**.
 
@@ -150,6 +181,19 @@ Here are the actual metrics gathered by running `ab` on a local Mac:
 | **Total Time Taken** | **8.350 seconds** | 9.773 seconds | **Custom Server completes ~14.5% faster** |
 | **Average Latency (mean)** | **83.499 ms** | 97.731 ms | **Custom Server has ~14.5% lower latency** |
 | **Max Tail Latency (100%)** | **293 ms** | 442 ms | **Custom Server has ~33% lower tail latency** |
+
+### Benchmark Environment
+- **Machine**: MacBook Air M2, 8-core CPU, 16 GB RAM
+- **Benchmark Command**: `ab -n 10000 -c 100` targeting `/` route
+- **Software Versions**: Python 3.13.5, Flask 3.1.3, Werkzeug 3.1.8
+
+### Why is our server faster under this workload?
+1. **Non-blocking Event Loop**: The single-threaded `selectors` loop monitors connections without allocating thread contexts, preventing idle waiting.
+2. **Pre-allocated Thread Pool**: Offloading tasks to a fixed worker pool avoids thread-per-request spawning overhead.
+3. **HTTP/1.1 Keep-Alive**: The persistent socket reuse reduces repetitive TCP 3-way handshake overhead.
+4. **Zero Framework Baggage**: Our routing and middleware evaluation are highly stripped down, avoiding Werkzeug/Flask's extra application contexts, routing layers, and template lookups.
+
+*Note on the Flask comparison: Flask is a feature-rich, mature, general-purpose framework. This benchmark measures a raw throughput workload under a specific concurrency level; the results demonstrate the efficiency of our low-level hybrid networking model rather than suggesting this server is broadly "better" than Flask.*
 
 ---
 
