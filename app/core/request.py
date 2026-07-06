@@ -3,13 +3,14 @@ class HTTPRequest:
     Represents an HTTP request parsing raw socket bytes into an object-oriented structure.
     Adheres to SOLID Single Responsibility Principle by only managing request parsing.
     """
-    def __init__(self, method: str, path: str, headers: dict, body: bytes, query_params: dict = None):
+    def __init__(self, method: str, path: str, headers: dict, body: bytes, query_params: dict = None, version: str = "HTTP/1.1"):
         self.method = method.upper()
         self.path = path
         self.headers = headers  # Case-insensitive keys
         self.body = body
         self.query_params = query_params or {}
         self.path_params = {}  # Set later by the Router during route matching
+        self.version = version
 
     @classmethod
     def parse(cls, headers_part: bytes, body_part: bytes) -> 'HTTPRequest':
@@ -29,6 +30,7 @@ class HTTPRequest:
             
         method = parts[0]
         full_path = parts[1]
+        version = parts[2]
         
         # 1. Parse path and query parameters
         path = full_path
@@ -58,7 +60,8 @@ class HTTPRequest:
             path=path,
             headers=headers,
             body=body_part,
-            query_params=query_params
+            query_params=query_params,
+            version=version
         )
 
     def get_header(self, name: str, default: str = "") -> str:

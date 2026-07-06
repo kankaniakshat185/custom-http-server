@@ -148,7 +148,11 @@ class HTTPServer:
             conn.sendall(response.to_bytes(supports_gzip))
 
             # Persistent Connection logic
-            if request.get_header("connection").lower() == "close":
+            # HTTP/1.1 defaults to keep-alive. HTTP/1.0 defaults to close.
+            conn_header = request.get_header("connection").lower()
+            is_keep_alive = (request.version == "HTTP/1.1" and conn_header != "close") or (conn_header == "keep-alive")
+
+            if not is_keep_alive:
                 self._close_connection(conn)
             else:
                 # Re-register for reading future pipelined requests
