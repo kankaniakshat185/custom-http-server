@@ -1,26 +1,25 @@
 # Custom Python HTTP Server & Web Framework
 
-A modular HTTP/1.1 server and lightweight web framework built from scratch in Python, featuring an event-driven architecture with non-blocking I/O (`selectors`), a worker thread pool for request processing, Express-style middleware, dynamic routing, and persistent HTTP/1.1 connections.
+A modular, high-performance HTTP/1.1 server and lightweight framework built from scratch in Python. It uses an event-driven networking architecture with non-blocking I/O (`selectors`), a task-dispatching worker thread pool, Express-style middleware, dynamic path variable routing, and persistent HTTP/1.1 connections.
 
 ---
 
-## Features
+## Core Features
 
-- **Asynchronous Event Loop**: Uses `selectors` (`epoll` on Linux, `kqueue` on macOS) for non-blocking socket polling.
-- **Worker Thread Pool**: Pre-allocated `ThreadPoolExecutor` offloads filesystem and route handler blocking tasks.
-- **Middleware Pipeline**: Onion-style recursive middleware execution pipeline (`request, next_handler`).
-- **Dynamic Routing**: Dynamic path parameter matching (e.g., `/echo/:string`).
-- **Persistent Connections**: HTTP/1.1 `Connection: Keep-Alive` pipelined socket reuse.
-- **Content Negotiation**: Dynamic GZIP compression.
-- **Directory Traversal Protection**: Validation via canonical filesystem checks (`os.path.realpath`) to secure static file endpoints.
-- **MIME-Type Resolution**: Automatic file content detection via Python's standard `mimetypes` library.
-- **Logger**: Built-in access logging middleware.
+* **Async Event Loop**: Event-driven network loop using I/O multiplexing (`selectors` wrapping `epoll`/`kqueue`) for non-blocking socket polling.
+* **ThreadPool Offloading**: Pre-allocated thread pool (`ThreadPoolExecutor`) to process routing handlers and file I/O tasks, keeping the event loop responsive.
+* **Onion Middleware**: A recursive middleware chain pipeline (`request, next_handler`) resembling Express/Koa architecture.
+* **Parametric Routing**: Dynamic path parameter parsing and pattern matching (e.g., `/echo/:string`).
+* **Keep-Alive**: Support for persistent TCP connections to eliminate repetitive handshake overhead.
+* **GZIP Compression**: Automated runtime payload compression based on client request headers.
+* **Directory Traversal Defense**: Canonical path validation (`os.path.realpath`) blocking file access outside the sandbox folder.
+* **MIME Resolution**: Automated header detection using the standard system mime database.
 
 ### Performance Highlights
 * **~1,200 requests/sec** throughput.
-* **~17% faster** than Flask under this benchmark workload.
+* **~17% higher throughput** than Flask under this raw benchmarking workload.
 * **~14.5% lower** average latency.
-* **~33% lower** tail latency (longest request).
+* **~33% lower** tail latency.
 
 ---
 
@@ -53,21 +52,19 @@ graph TD
     SocketSend -->|Keep-Alive Check| EventLoop
 ```
 
-### Concurrency Model
-1. **Network I/O**: The server runs a single-threaded event loop. All client socket connections are set to non-blocking mode and monitored for reading. 
-2. **Task Offloading**: Reading raw request bytes is handled directly on the main event loop thread. Once the headers and full body are assembled, the request is offloaded as a task to a pre-allocated worker pool of threads.
-3. **Keep-Alive**: After a worker thread finished writing response bytes to the client socket, the socket is re-registered back to the selectors event loop to wait for subsequent requests.
+### Concurrency Design
+* **Event Loop Thread**: Monitors active connections, reads incoming bytes into session buffers, and detects request boundaries (`\r\n\r\n` + `Content-Length`).
+* **Task Queue**: Once a request is fully assembled, the event loop unregisters the client socket and hands the task off to the Thread Pool.
+* **Connection Re-registration**: After writing the response, the worker thread checks the keep-alive status. If persistent, it registers the socket back to the event loop.
 
 ---
 
 ## Design Goals
 
-- **Modular Architecture**: Clean modular layout using SOLID principles.
-- **Separation of Concerns**: Isolated request/response modeling, event loop management, and routing logic.
-- **Event-Driven Networking**: High concurrency scaling using kernel-level event triggers (`epoll`/`kqueue`).
-- **Extensible Middleware Pipeline**: Customizable chain pipeline representing modern production frameworks.
-- **Cross-Platform Compatibility**: Automatically resolves selector implementations across macOS and Linux.
-- **Thread-Safe Request Execution**: Socket registries and state maps protected by lock synchronization objects.
+* **Modular Architecture**: Restructured from a monolith into clean, single-responsibility modules.
+* **Separation of Concerns**: Disconnected request/response formatting, router matching, and socket loop layers.
+* **Extensible Middleware**: Clean interfaces allowing third-party extensions to wrap route execution.
+* **Thread Safety**: State maps and selector registrations synchronized via thread lock primitives.
 
 ---
 
@@ -100,53 +97,44 @@ custom-http-server/
 ## How to Run
 
 ### Local Execution
-Set the `PYTHONPATH` when starting the server to resolve package imports:
+Specify the target sandbox directory and launch with `PYTHONPATH`:
 ```bash
 mkdir -p sandbox
 PYTHONPATH=. python3 app/main.py --directory ./sandbox
 ```
 
 ### Docker Execution
-Run the server in a containerized environment:
+Or start the containerized service:
 ```bash
-# Build and start in foreground
 docker-compose up --build
-
-# Run in background
-docker-compose up -d
-
-# Stop container
-docker-compose down
 ```
 
 ---
 
-## Custom Framework Usage
+## Framework Usage Example
 
-To use this project as a lightweight web framework, import the server and response classes:
+To write applications using this project as a framework:
 
 ```python
 from app.core.server import HTTPServer
 from app.core.response import HTTPResponse
 
-# Initialize server
 server = HTTPServer(host="0.0.0.0", port=4221, max_workers=10)
 
-# Register a custom middleware
+# Register custom middleware
 def custom_middleware(request, next_handler):
     print(f"Request intercepted: {request.path}")
     return next_handler(request)
 
 server.pipeline.use(custom_middleware)
 
-# Register a dynamic route
+# Register route
 def hello_handler(request):
     name = request.path_params.get("name", "World")
     return HTTPResponse(status=200, body=f"Hello, {name}!".encode("utf-8"))
 
 server.router.add_route("GET", "/hello/:name", hello_handler)
 
-# Start Event Loop
 server.start()
 ```
 
@@ -154,18 +142,12 @@ server.start()
 
 ## Benchmarking Guide
 
-You can benchmark this server against a standard Python Flask application using load-testing tools like **Apache Bench (`ab`)** or **`wrk`**.
+You can compare this server against a standard Flask setup using Apache Bench (`ab`):
 
-### 1. Test Setup
-Start both servers on different ports (e.g. our custom server on `:4221` and a basic Flask app on `:8080`).
-
-### 2. Running Benchmarks
-Send 10,000 requests with a concurrency of 100 requests at the `/` endpoint:
 ```bash
-# Benchmark our Custom Server
+# 1. Start our server on port 4221, and Flask on port 8080
+# 2. Run ab load-test (10,000 requests, 100 concurrency)
 ab -n 10000 -c 100 http://localhost:4221/
-
-# Benchmark Flask
 ab -n 10000 -c 100 http://localhost:8080/
 ```
 
@@ -173,7 +155,7 @@ ab -n 10000 -c 100 http://localhost:8080/
 
 ## Performance & Benchmarks
 
-Here are the actual metrics gathered by running `ab` on a local Mac:
+The following metrics were gathered locally on a MacBook Air:
 
 | Metric | Custom HTTP Server (Our Framework) | Python Flask (Werkzeug) | Comparison |
 | :--- | :--- | :--- | :--- |
@@ -182,50 +164,38 @@ Here are the actual metrics gathered by running `ab` on a local Mac:
 | **Average Latency (mean)** | **83.499 ms** | 97.731 ms | **Custom Server has ~14.5% lower latency** |
 | **Max Tail Latency (100%)** | **293 ms** | 442 ms | **Custom Server has ~33% lower tail latency** |
 
-### Benchmark Environment
-- **Machine**: MacBook Air M2, 8-core CPU, 16 GB RAM
-- **Benchmark Command**: `ab -n 10000 -c 100` targeting `/` route
-- **Software Versions**: Python 3.13.5, Flask 3.1.3, Werkzeug 3.1.8
+### Benchmark Specifications
+- **Hardware**: MacBook Air M2 (8-core CPU, 16 GB RAM)
+- **Parameters**: `ab -n 10000 -c 100` targeting `/` route
+- **Software**: Python 3.13.5, Flask 3.1.3, Werkzeug 3.1.8
 
-### Why is our server faster under this workload?
-1. **Non-blocking Event Loop**: The single-threaded `selectors` loop monitors connections without allocating thread contexts, preventing idle waiting.
-2. **Pre-allocated Thread Pool**: Offloading tasks to a fixed worker pool avoids thread-per-request spawning overhead.
-3. **HTTP/1.1 Keep-Alive**: The persistent socket reuse reduces repetitive TCP 3-way handshake overhead.
-4. **Zero Framework Baggage**: Our routing and middleware evaluation are highly stripped down, avoiding Werkzeug/Flask's extra application contexts, routing layers, and template lookups.
+### Performance Analysis
+* **Network Multiplexing**: The single-threaded `selectors` loop monitors client sockets via kernel-level event descriptors. Idle sockets consume no CPU context-switching overhead.
+* **Worker Execution Queue**: Thread allocation costs are paid upfront during startup. Socket workloads are dispatched as task pointers to the thread pool, preventing thread-per-connection scaling failures.
+* **Low Overhead Routing**: We omit heavy routing engines, application context loaders, and request/response abstraction layers found in general-purpose frameworks like Flask.
 
-*Note on the Flask comparison: Flask is a feature-rich, mature, general-purpose framework. This benchmark measures a raw throughput workload under a specific concurrency level; the results demonstrate the efficiency of our low-level hybrid networking model rather than suggesting this server is broadly "better" than Flask.*
+*Note: Flask is a feature-rich, general-purpose framework. This benchmark measures a raw throughput workload under a specific concurrency level; the results demonstrate the efficiency of our low-level hybrid networking model rather than suggesting this server is broadly "better" than Flask.*
 
 ---
 
 ## Testing Endpoints
 
-#### 1. Root Path
 ```bash
+# 1. Root
 curl -v http://localhost:4221/
-```
 
-#### 2. Echo with Gzip Decompression
-```bash
+# 2. Echo with compression
 curl -v http://localhost:4221/echo/hello_world --compressed
-```
 
-#### 3. Fetch User-Agent
-```bash
+# 3. User-Agent
 curl -v http://localhost:4221/user-agent -H "User-Agent: my-custom-agent"
-```
 
-#### 4. File Actions (POST, GET, DELETE)
-```bash
-# Upload
+# 4. File uploads/downloads
 curl -v -X POST http://localhost:4221/files/hello.txt -d "Written through custom server"
-# Download
 curl -v http://localhost:4221/files/hello.txt
-# Delete
 curl -v -X DELETE http://localhost:4221/files/hello.txt
-```
 
-#### 5. Directory Traversal Security Test
-```bash
+# 5. Directory Traversal test
 curl -v --path-as-is http://localhost:4221/files/../../../../etc/passwd
 ```
 
