@@ -1,9 +1,13 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+WORKDIR /workspace
 
-COPY app/ .
+# Copy the app directory as a package folder
+COPY app/ ./app/
 
 EXPOSE 4221
 
-CMD ["python3", "-u", "main.py", "--directory", "/data"]
+# Set the Python path to /workspace so "from app.core..." works inside container
+ENV PYTHONPATH=/workspace
+
+CMD ["python3", "-u", "app/main.py", "--directory", "/data"]
